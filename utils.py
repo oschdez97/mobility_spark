@@ -1,3 +1,4 @@
+import numpy as np
 from math import sqrt, pi, sin, cos, acos, atan2
 from datetime import datetime, timedelta, date
 earth_radius = 6371
@@ -71,18 +72,24 @@ def get_range(times, time_init, time_end):
     high = upper_bound(times, time_end)
     return [low+1, high - low]
 
-def count_occurrences(elems):
+def count_occurrences_and_normalize(elems):
     d = {}
     for i in elems:
         if i not in d:
             d[i] = 1
         else:
             d[i] += 1
+            
+    normalize = float(np.sum(np.array([count for count in d.values()])))
+    for i in d:
+        d[i] /= normalize
+        d[i] = round(d[i], 4)
+    
     return list(map(list, d.items()))
 
 def origin_destination_product(start, end):
     res = []
     for cell_start, val_1 in start:
         for cell_end, val_2 in end:
-            res.append([cell_start, cell_end, str(int(val_1) * int(val_2))])
+            res.append([cell_start, cell_end, str(float(val_1) * float(val_2))])
     return res
