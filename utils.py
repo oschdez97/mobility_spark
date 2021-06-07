@@ -84,12 +84,9 @@ def count_occurrences_and_normalize(elems):
     for i in d:
         d[i] /= normalize
         d[i] = round(d[i], 4)
-    
     return list(map(list, d.items()))
 
-def origin_destination_product(start, end):
-    res = []
-    for cell_start, val_1 in start:
-        for cell_end, val_2 in end:
-            res.append([cell_start, cell_end, str(float(val_1) * float(val_2))])
-    return res
+def flat_origin_destination_product(row):
+    for cell_start, val_1 in row[0][0]:
+        for cell_end, val_2 in row[0][1]:
+            yield (cell_start, cell_end, float(val_1) * float(val_2)) 
