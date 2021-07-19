@@ -89,4 +89,32 @@ def count_occurrences_and_normalize(elems):
 def flat_origin_destination_product(row):
     for cell_start, val_1 in row[0][0]:
         for cell_end, val_2 in row[0][1]:
-            yield (cell_start, cell_end, float(val_1) * float(val_2)) 
+            yield (cell_start, cell_end, float(val_1) * float(val_2))
+
+def mapp_tow_cell(elem, mapp):
+    err    = []
+    cells  = []
+    times  = []
+    zipped = list(zip(elem[1], elem[2]))
+    for _id, _time in zipped:
+        if _id not in mapp or mapp[_id] == None or mapp[_id] == '':
+           err.append((_id, _time))
+        else:
+            cells.append(mapp[_id])
+            times.append(_time)
+    yield (elem[0], cells, times)
+    
+def between_ab_OR_dc(data, interval_1, interval_2):
+    code   = data[0]
+    towers = data[1]
+    times  = data[2]
+    interval_1 = get_range(times, interval_1[0], interval_1[1])
+    interval_2 = get_range(times, interval_2[0], interval_2[1])
+    zip_data = list(zip(times, towers))
+    a = zip_data[interval_1[0] - 1 : interval_1[0] + interval_1[1] - 1]
+    b = zip_data[interval_2[0] - 1 : interval_2[0] + interval_2[1] - 1]
+    res = list(set(a) | set(b))
+    res.sort()
+    towers = [x[1] for x in res]
+    times  = [x[0] for x in res]
+    yield (code, towers, times)
