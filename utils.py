@@ -17,8 +17,12 @@ def degrees_to_radians(degrees):
 
 
 def distance_in_km_between_coordinates(coord1, coord2):
-	lat1, lon1, lat2, lon2 = coord1[0], coord1[1], coord2[0], coord2[1]
-
+	# TODO: hacer esto mas elegante!!
+    #lat1, lon1, lat2, lon2 = float(coord1[0]), float(coord1[1]), float(coord2[0]), float(coord2[1])
+    
+	lat1, lon1 = list(map(float, coord1))
+	lat2, lon2 = list(map(float, coord2))
+    
 	dLat = degrees_to_radians(lat2 - lat1)
 	dLon = degrees_to_radians(lon2 - lon1)
 
@@ -72,49 +76,50 @@ def get_range(times, time_init, time_end):
     high = upper_bound(times, time_end)
     return [low+1, high - low]
 
-def count_occurrences_and_normalize(elems):
-    d = {}
-    for i in elems:
-        if i not in d:
-            d[i] = 1
-        else:
-            d[i] += 1
-            
-    normalize = float(np.sum(np.array([count for count in d.values()])))
-    for i in d:
-        d[i] /= normalize
-        d[i] = round(d[i], 4)
-    return list(map(list, d.items()))
-
-def flat_origin_destination_product(row):
-    for cell_start, val_1 in row[0][0]:
-        for cell_end, val_2 in row[0][1]:
-            yield (cell_start, cell_end, float(val_1) * float(val_2))
-
 def mapp_tow_cell(elem, mapp):
-    err    = []
     cells  = []
     times  = []
     zipped = list(zip(elem[1], elem[2]))
     for _id, _time in zipped:
-        if _id not in mapp or mapp[_id] == None or mapp[_id] == '':
-           err.append((_id, _time))
-        else:
+        if mapp.__contains__(_id):
             cells.append(mapp[_id])
             times.append(_time)
     yield (elem[0], cells, times)
-    
+
+def mapp_cell_latlon(row, mapp):
+    lats_lons = []
+    cells = row[1]
+    for cell in cells:
+        if mapp.__contains__(cell):
+            lats_lons.append(mapp[cell])
+    yield (row[0], cells, lats_lons)
+            
+# UserMobility func getting broadcast error if i put it inside class definition
 def between_ab_OR_dc(data, interval_1, interval_2):
-    code   = data[0]
-    towers = data[1]
-    times  = data[2]
-    interval_1 = get_range(times, interval_1[0], interval_1[1])
-    interval_2 = get_range(times, interval_2[0], interval_2[1])
-    zip_data = list(zip(times, towers))
-    a = zip_data[interval_1[0] - 1 : interval_1[0] + interval_1[1] - 1]
-    b = zip_data[interval_2[0] - 1 : interval_2[0] + interval_2[1] - 1]
-    res = list(set(a) | set(b))
-    res.sort()
-    towers = [x[1] for x in res]
-    times  = [x[0] for x in res]
-    yield (code, towers, times)
+        code   = data[0]
+        towers = data[1]
+        times  = data[2]
+        interval_1 = get_range(times, interval_1[0], interval_1[1])
+        interval_2 = get_range(times, interval_2[0], interval_2[1])
+        zip_data = list(zip(times, towers))
+        a = zip_data[interval_1[0] - 1 : interval_1[0] + interval_1[1] - 1]
+        b = zip_data[interval_2[0] - 1 : interval_2[0] + interval_2[1] - 1]
+        res = list(set(a) | set(b))
+        res.sort()
+        towers = [x[1] for x in res]
+        times  = [x[0] for x in res]
+        yield (code, towers, times)
+
+# UserMobility func getting broadcast error if i put it inside class definition 
+def accumulate_count(data, lower_bound, upper_bound):
+        code = data[0]
+        towers = data[1]
+        times = data[2]
+        res = {} 
+        for i, tow in enumerate(towers):
+            if lower_bound < times[i] < upper_bound:
+                if tow not in res:
+                    res[tow] = 1
+                else:
+                    res[tow] += 1
+        yield (code, list(res.keys()), list(res.values()))
