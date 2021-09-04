@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial import KDTree
 from math import sqrt, pi, sin, cos, acos, atan2
 from datetime import datetime, timedelta, date
 earth_radius = 6371
@@ -96,30 +97,79 @@ def mapp_cell_latlon(row, mapp):
             
 # UserMobility func getting broadcast error if i put it inside class definition
 def between_ab_OR_dc(data, interval_1, interval_2):
-        code   = data[0]
-        towers = data[1]
-        times  = data[2]
-        interval_1 = get_range(times, interval_1[0], interval_1[1])
-        interval_2 = get_range(times, interval_2[0], interval_2[1])
-        zip_data = list(zip(times, towers))
-        a = zip_data[interval_1[0] - 1 : interval_1[0] + interval_1[1] - 1]
-        b = zip_data[interval_2[0] - 1 : interval_2[0] + interval_2[1] - 1]
-        res = list(set(a) | set(b))
-        res.sort()
-        towers = [x[1] for x in res]
-        times  = [x[0] for x in res]
-        yield (code, towers, times)
+    code   = data[0]
+    towers = data[1]
+    times  = data[2]
+    interval_1 = get_range(times, interval_1[0], interval_1[1])
+    interval_2 = get_range(times, interval_2[0], interval_2[1])
+    zip_data = list(zip(times, towers))
+    a = zip_data[interval_1[0] - 1 : interval_1[0] + interval_1[1] - 1]
+    b = zip_data[interval_2[0] - 1 : interval_2[0] + interval_2[1] - 1]
+    res = list(set(a) | set(b))
+    res.sort()
+    towers = [x[1] for x in res]
+    times  = [x[0] for x in res]
+    yield (code, towers, times)
 
 # UserMobility func getting broadcast error if i put it inside class definition 
 def accumulate_count(data, lower_bound, upper_bound):
-        code = data[0]
-        towers = data[1]
-        times = data[2]
-        res = {} 
-        for i, tow in enumerate(towers):
-            if lower_bound < times[i] < upper_bound:
-                if tow not in res:
-                    res[tow] = 1
-                else:
-                    res[tow] += 1
-        yield (code, list(res.keys()), list(res.values()))
+    code = data[0]
+    towers = data[1]
+    times = data[2]
+    res = {} 
+    for i, tow in enumerate(towers):
+        if lower_bound < times[i] < upper_bound:
+            if tow not in res:
+                res[tow] = 1
+            else:
+                res[tow] += 1
+    yield (code, list(res.keys()), list(res.values()))
+
+# MobilityMatrix        
+def count_occurrences_and_normalize(elems):
+    d = {}
+    for i in elems:
+        if i not in d:
+            d[i] = 1
+        else:
+            d[i] += 1
+    normalize = float(np.sum(np.array([count for count in d.values()])))
+    for i in d:
+        d[i] /= normalize
+        d[i] = round(d[i], 4)
+    return list(map(list, d.items()))
+
+def flat_origin_destination_product(row):
+    for cell_start, val_1 in row[0][0]:
+        for cell_end, val_2 in row[0][1]:
+            yield (cell_start, cell_end, float(val_1) * float(val_2))
+            
+            
+def km_displacement(elems):
+    res = []
+    for i in range(len(elems)-1):
+        d = distance_in_km_between_coordinates(elems[i], elems[i+1])
+        res.append(d)
+    return sum(res)
+
+# UserMobility    
+def map_area_correlator_to_coord(towers, mapp):
+    res = []
+    for i in towers:
+        res.append(mapp[i])
+    return res
+    
+def get_mean_home_tower(weights, coords):
+    mean_tower = [0, 0]
+    weights = list(map(float, weights))
+    coords = [list(map(float, coord)) for coord in coords]
+    for i in range(len(coords)):
+        # mean_tower = mean_tower + weights[i] * tower_coord
+        # getting trouble with numpy and udf
+        tower_coord = coords[i]
+        tmp = [weights[i] * tower_coord[0], weights[i] * tower_coord[1]]
+        mean_tower = [mean_tower[0] + tmp[0], mean_tower[1] + tmp[1]]
+    kdtree = KDTree(coords)
+    kdtree_query = kdtree.query(mean_tower, 1)
+    res = list(map(str, list(kdtree.data[kdtree_query[1]])))
+    return res
