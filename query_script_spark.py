@@ -2,6 +2,7 @@ import json
 import time
 import math
 import numpy as np
+from os import path
 import pandas as pd
 import pyspark.sql.functions as F
 #from utils import *
@@ -11,19 +12,24 @@ from collections import defaultdict
 from scipy.spatial import KDTree
 from external_functions import *
 
+import warnings
+warnings.filterwarnings('ignore')
 
-CURRENT_DIR  = '/home/hellscream/Documents/backendSpark'
-CELL_AREA    = '/data/cell_area.csv'
-PARQUETS_DIR = '/data/parquets'
+CURRENT_DIR = path.join(path.dirname(path.abspath(__file__)))
+CELL_AREA    = CURRENT_DIR + '/data/cell_area.csv'
+PARQUETS_DIR = CURRENT_DIR + '/data/parquets'
 TOWER_AUX_PROPERTIES_FILE = CURRENT_DIR + '/data/voronoi_props.json'
+MAPP_CELL_TOW_DIR = CURRENT_DIR + '/data/cell-tow.json'
+MAPP_TOW_LATLON_DIR = CURRENT_DIR + '/data/tow-latlon.json'
 
-with open('cell-tow.json') as json_file:
+with open(MAPP_CELL_TOW_DIR) as json_file:
     cell_tow_mapp = json.load(json_file)
 
-with open('tow-latlon.json') as json_file:
+with open(MAPP_TOW_LATLON_DIR) as json_file:
     tow_latlon_mapp = json.load(json_file)
 
 
+# DF Schema
 '''
 root
  |-- code: integer (nullable = true)
@@ -49,26 +55,31 @@ map_area_correlator_to_coord_udf = F.udf(lambda x : map_area_correlator_to_coord
 ############################## Mobility ##############################
 ######################################################################
 
-def mobility(spark_session, date, time_start_lower, time_start_high, time_end_lower, time_end_high):
+def mobility(date, time_start_lower, time_start_high, time_end_lower, time_end_high):
     
+    spark_session = init_spark_session()
+
     users_cells_start, workers = get_mobility_at_time_interval(spark_session, date, time_start_lower, time_start_high) 
     users_cells_end, sleepers = get_mobility_at_time_interval(spark_session, date, time_end_lower, time_end_high)
     sleepers_v2 = get_sleepers(spark_session, date)
     matrix, vector = build_matrix(date, users_cells_start, users_cells_end, workers, sleepers, sleepers_v2)
+    
+    return matrix, vector
 
+    '''
     with open('2021-03-01_matrix.json', 'w') as file:
         json.dump(matrix, file)
 
     with open('2021-03-01_vector.json', 'w') as file:
         json.dump(vector, file)
-
+    '''
 
 def get_mobility_at_time_interval(spark, date, time_start, time_end):
     time_start = get_time_in_seconds(time_start)
     time_end = get_time_in_seconds(time_end)
 
     # load correspondent parquet
-    df = spark.read.parquet(CURRENT_DIR + PARQUETS_DIR + '/' + date)
+    df = spark.read.parquet(PARQUETS_DIR + '/' + date)
     
     # get registers between time spam
     df = df.rdd.flatMap(lambda rows : get_range(rows, time_start, time_end))\
@@ -94,7 +105,7 @@ def get_sleepers(spark, date, time_sleep_lower='01:00', time_sleep_high='04:00')
     time_sleep_high = get_time_in_seconds(time_sleep_high)
     
     # load correspondent parquet
-    df = spark.read.parquet(CURRENT_DIR + PARQUETS_DIR + '/' + date)
+    df = spark.read.parquet(PARQUETS_DIR + '/' + date)
 
     # map cell_id to tower_id
     users_cells_sleep = df.rdd.flatMap(lambda x : mapp_cell_tow(x, cell_tow_mapp)).toDF(['code', 'towers', 'times'])
@@ -250,13 +261,15 @@ def farthest_tower(towers, distances):
             tower = towers[i]
     return tower
 
-def get_users_mobility(spark, date, start_time='07:00', end_time='20:00', sleep_start_time='01:00', sleep_end_time='04:00'):
+def get_users_mobility(date, start_time='07:00', end_time='20:00', sleep_start_time='01:00', sleep_end_time='04:00'):
+    spark = init_spark_session()
+    
     start_time = get_time_in_seconds(start_time)
     end_time = get_time_in_seconds(end_time)
     sleep_start_time = get_time_in_seconds(sleep_start_time)
     sleep_end_time = get_time_in_seconds(sleep_end_time)
     
-    df = spark.read.parquet(CURRENT_DIR + PARQUETS_DIR + '/' + date)
+    df = spark.read.parquet(PARQUETS_DIR + '/' + date)
     
     # records between (start_time, end_time) OR (sleep_start_time, sleep_end_time)
     df = df.rdd.flatMap(lambda rows : between_ab_OR_dc(rows, (start_time, end_time), (sleep_start_time, sleep_end_time)))\
@@ -315,34 +328,43 @@ def get_users_mobility(spark, date, start_time='07:00', end_time='20:00', sleep_
     results_dfs = [users_cells_start, distinct_cells_df, km_displacement_df, distinct_towers_df, \
         radius_gyration_df, farthest_tower_df] 
 
-    # return users_cells_start, distinct_cells_df, km_displacement_df, distinct_towers_df, radius_gyration_df, farthest_tower_df
+    return users_cells_start, distinct_cells_df, km_displacement_df\
+        ,distinct_towers_df, radius_gyration_df, farthest_tower_df
 
+    '''
     user_mobility = users_cells_start.unionByName(distinct_cells_df, allowMissingColumns=True)
     for df in results_dfs[2:]:     
         user_mobility = user_mobility.unionByName(df, allowMissingColumns=True)
     return user_mobility 
-    #user_mobility.groupBy('code').agg(F.sum('distinct_cells_count'))
+    '''
 
+
+###############################################
+################### Testing ###################
+###############################################
 
 def test_mobility_matrix():
     '''
         time sent 1914.185616493225s = 31m
     '''
     start = time.time()
-    spark_session = init_spark_session()
-    mobility(spark_session, '2021-03-01', '06:00', '10:00', '16:00', '20:00')
+    mobility('2021-03-01s', '06:00', '10:00', '16:00', '20:00')
     end = time.time()
     print('time spent: ' + str((end - start) / 60))
 
 
 def test_user_mobility():
-    spark_session = init_spark_session()
-    user_mobility = get_users_mobility(spark_session, '2021-03-01s')
-    user_mobility.show()
-    user_mobility.printSchema()
+    home_tower, dcell, km, dtow, radio, farthesttow = get_users_mobility('2021-03-01s')
+    home_tower.show()
+    dcell.show()
+    km.show()
+    dtow.show()
+    radio.show()
+    farthesttow.show()
 
 if __name__ == '__main__':
-    test_user_mobility()
-    # test_mobility_matrix()
-
+    # For tests i use '2021-03-01s' parquet, smaller version of '2021-03-01' parquet day
+    test_mobility_matrix()
+    # test_user_mobility()
+    
 

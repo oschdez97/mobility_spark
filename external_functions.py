@@ -108,10 +108,6 @@ def fix_json_format(jobj):
     return m
 
 
-'''
-aqui acumular el tiempo por torre
-'''
-
 def accumulate_count(data, lower_bound, upper_bound):
     code = data[0]
     towers = data[1]
